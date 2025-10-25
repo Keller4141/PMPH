@@ -1,23 +1,28 @@
--- Vi sender et fladt array + segmentlængder + en pivot pr. segment,
--- og forventer at få (omarrangeret array, cnt(<), cnt(==)) pr. segment tilbage.
-
-import "rank_search_k"
+import "flatten_rank_search_k"
 
 -- ==
--- entry check_partition3_batch
--- input  { [9f32,34f32,1f32,23f32,3f32,4f32,4f32,10f32,15f32,2f32,   6f32,4f32,10f32,20f32,1f32,  2f32,2f32,2f32]
---          [10i32, 5i32, 3i32]
---          [4f32, 6f32, 1f32] }
--- output { [1f32,3f32,2f32,4f32,4f32,9f32,34f32,23f32,10f32,15f32,   4f32,1f32,6f32,10f32,20f32,  2f32,2f32,2f32]
---          [3i32, 2i32, 0i32]
---          [2i32, 1i32, 0i32] }
+-- entry: check_partition3_batch
+-- input { [4f32,3.5f32,3f32,2f32,3.5f32,
+--          9f32,10f32,11f32,10f32,
+--          2f32,1f32,3f32]
+--         [5i32,4i32,3i32]
+--         [3.5f32,10f32,2f32] }
+-- output { [3f32,2f32,3.5f32,3.5f32,4f32,
+--           9f32,10f32,10f32,11f32,
+--           1f32,2f32,3f32]
+--          [2i32,1i32,1i32]
+--          [2i32,2i32,1i32] }
 
--- input  { [9f32,34f32,1f32,23f32,3f32,4f32,4f32,10f32,15f32,2f32,   6f32,4f32,10f32,20f32,1f32,  2f32,2f32,2f32]
---          [10i32, 5i32, 3i32, 0i32]
---          [4f32, 6f32, 1f32, 0f32] }
--- output { [1f32,3f32,2f32,4f32,4f32,9f32,34f32,23f32,10f32,15f32,   4f32,1f32,6f32,10f32,20f32,  2f32,2f32,2f32]
---          [3i32, 2i32, 0i32, 0i32]
---          [2i32, 1i32, 0i32, 0i32] }
+-- ==
+-- entry: check_partition3_batch
+-- input { [5f32,1f32,6f32,5f32,
+--          2.5f32,0f32]
+--         [4i32,0i32,2i32]
+--         [5f32,7f32,2.5f32] }
+-- output { [1f32,5f32,5f32,6f32,
+--           0f32,2.5f32]
+--          [1i32,0i32,1i32]
+--          [2i32,0i32,1i32] }
 
 entry check_partition3_batch [n][m]
   (xs   : [n]f32)

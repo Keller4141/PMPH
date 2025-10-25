@@ -1,85 +1,58 @@
--- validate_rank_search_k.fut (reworked)
--- Tjekker tre varianter mod en “sandhed”: radix-sort pr. segment + vælg k.
+import "flatten_rank_search_k"
 
-import "rank_search_k"
-
--- Små hjælpere til at bygge flad batch-repræsentation ud fra et 2D input.
-let flatten2d [m][n] 't (x: [m][n]t) : []t =
-  concat (map (\row -> row) x)
-
-let mk_shape_and_ks [m] (seg_len: i32) : ([m]i32, [m]i32) =
-  let shp = replicate m seg_len
-  let ks  = map (\ln -> max 1 ((ln+1)/2)) shp
-  in (shp, ks)
-
-let mk_ii1_i32 [m] (shp: [m]i32) : []i32 =
-  concat (map (\seg -> replicate shp[seg] seg) (iota m))
-
--- =========================================
--- 1) Unoptimized (human reasoning, pivot fra data)
--- =========================================
-
+-- Validation Unoptimized
 -- ==
 -- entry: validationUnoptimized
--- input { [10000][10]f32.random }
+-- random input { [5000][8]f32 }
 -- output { true }
--- input { [1000][100]f32.random }
+-- random input { [500][128]f32 }
 -- output { true }
-entry validationUnoptimized [m][n] (A2d: [m][n]f32) : bool =
-  let seg_len : i32 = i32 n
-  let flatA         = flatten2d A2d
-  let (shp, ks)     = mk_shape_and_ks m seg_len
-  let II1_i64       = map i64.i32 (mk_ii1_i32 m shp)
+entry validationUnoptimized [m] [n] (A : [m][n]f32) : bool =
+    let n_elem = i32.i64 n
+    let A = flatten A
+    let shp = replicate m n_elem
+    let ks = replicate m (n_elem/2)
+    let II1 = map (\i -> replicate n i) (iota m) |> flatten
 
-  let oracle = RankSearchK.radixSortRankSearchBatch ks shp flatA
-  let trial  = RankSearchK.humanReasoningBatchRankSearch ks flatA shp II1_i64
+    let valid_res = RankSearchK.radixSortRankSearchBatch ks shp A
+    let test_res  = RankSearchK.humanReasoningBatchRankSearch ks A shp II1
 
-  in reduce (&&) true (map2 (==) oracle trial)
+    in reduce (&&) true (map2 (==) valid_res test_res)
 
--- =========================================
--- 2) Optimized (human reasoning, pivot-estimat = gennemsnit pr. segment)
--- =========================================
-
+-- Validation Optimized
 -- ==
 -- entry: validationOptimized
--- input { [10000][10]f32.random }
+-- random input { [5000][8]f32 }
 -- output { true }
--- input { [1000][100]f32.random }
+-- random input { [500][128]f32 }
 -- output { true }
-entry validationOptimized [m][n] (A2d: [m][n]f32) : bool =
-  let seg_len : i32 = i32 n
-  let flatA         = flatten2d A2d
-  let (shp, ks)     = mk_shape_and_ks m seg_len
-  let II1_i32       = mk_ii1_i32 m shp
-  let II1_i64       = map i64.i32 II1_i32
+entry validationOptimized [m] [n] (A : [m][n]f32) : bool =
+    let n_elem = i32.i64 n
+    let A = flatten A
+    let shp = replicate m n_elem
+    let ks = replicate m (n_elem/2)
+    let II1 = map (\i -> replicate n i) (iota m) |> flatten |> map i32.i64
+    let ps = map2 (\ sum len -> sum / len) (reduce_by_index (replicate m (0)) (+) (0) (map i64.i32 II1) A) (map f32.i32 shp)
 
-  -- mean pr. segment som pivot-estimat
-  let sums : [m]f32 =
-    reduce_by_index m II1_i32 flatA 0f32 (+)
-  let ps : [m]f32 =
-    map2 (\s ln -> s / f32 ln) sums shp
+    let valid_res = RankSearchK.radixSortRankSearchBatch ks shp A
+    let test_res  = RankSearchK.humanReasoningBatchRankSearchOptimized ps ks shp II1 A
 
-  let oracle = RankSearchK.radixSortRankSearchBatch ks shp flatA
-  let trial  = RankSearchK.humanReasoningBatchRankSearchOptimized ps ks shp II1_i64 flatA
+    in reduce (&&) true (map2 (==) valid_res test_res)
 
-  in reduce (&&) true (map2 (==) oracle trial)
-
--- =========================================
--- 3) “Compiler-flattened” reference (partition3-baseret)
--- =========================================
-
+-- Validation Compiler flattened
 -- ==
 -- entry: validationCompilerFlattened
--- input { [10000][10]f32.random }
+-- random input { [5000][8]f32 }
 -- output { true }
--- input { [1000][100]f32.random }
+-- random input { [500][128]f32 }
 -- output { true }
-entry validationCompilerFlattened [m][n] (A2d: [m][n]f32) : bool =
-  let seg_len : i32 = i32 n
-  let flatA         = flatten2d A2d
-  let (shp, ks)     = mk_shape_and_ks m seg_len
+entry validationCompilerFlattened [m] [n] (A : [m][n]f32) : bool =
+    let n_elem = i32.i64 n
+    let A = flatten A
+    let shp = replicate m n_elem
+    let ks = replicate m (n_elem/2)
 
-  let oracle = RankSearchK.radixSortRankSearchBatch ks shp flatA
-  let trial  = RankSearchK.compilerThinkingBatchRankSearch ks flatA shp
+    let valid_res = RankSearchK.radixSortRankSearchBatch ks shp A
+    let test_res  = RankSearchK.compilerThinkingBatchRankSearch ks A shp
 
-  in reduce (&&) true (map2 (==) oracle trial)
+    in reduce (&&) true (map2 (==) valid_res test_res)

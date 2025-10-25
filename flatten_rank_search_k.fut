@@ -40,70 +40,95 @@ let expandi64  = expand (+) 0i64
 let expandf32  = expand (+) 0f32
 let expandbool = expand (||) false
 
+-- Returns an unsized []f32 so we avoid named-size conflicts like n vs n64.
+let expand_val_per_seg [m] (shp: [m]i32) (vals: [m]f32) : []f32 =
+  let total : i32   = reduce (+) 0 shp
+  let offs  : [m]i32 = scanex (+) 0 shp
+  let idxs  : [m]i64 = map i64.i32 offs
+  -- base: initialiser hele fladen med vals[0], og skriv segment-startværdier ind
+  let base  : []f32  = scatter (replicate (i64.i32 total) vals[0]) idxs vals
+  -- flags: true ved segment-starts
+  let marks : []i32  = scatter (replicate (i64.i32 total) 0) idxs (replicate m 1)
+  let flags : []bool = map (\x -> x == 1) marks
+  in sgmScanInc (\_ y -> y) vals[0] flags base
+
+-- Returnerer en usized []i32, så vi undgår navngivne størrelser.
+let expand_i32_by_seg [m] (shp: [m]i32) (vals: [m]i32) : []i32 =
+  let total : i32 = reduce (+) 0 shp
+  let offs  : [m]i32 = scanex (+) 0 shp
+  let idxs  : [m]i64 = map i64.i32 offs
+  let base  : []i32  = scatter (replicate (i64.i32 total) 0) idxs vals
+  let marks : []i32  = scatter (replicate (i64.i32 total) 0) idxs (replicate m 1)
+  let flags : []bool = map (\x -> x == 1) marks
+  in sgmScanInc (+) 0 flags base
+
+let seg_start_flags [m] (shp: [m]i32) : []bool =
+  let total : i32 = reduce (+) 0 shp
+  let offs  : [m]i32 = scanex (+) 0 shp
+  let idxs  : [m]i64 = map i64.i32 offs
+  let marks : []i32  = scatter (replicate (i64.i32 total) 0) idxs (replicate m 1)
+  in map (\x -> x == 1) marks
+
 -- =======================
 -- 3-vejs partition pr. segment
 -- =======================
 module Partition3 = {
   let batch [m] [n]
-      (p1: f32 -> f32 -> bool) (p2: f32 -> f32 -> bool)
-      (As : [n]f32) (shp : [m]i32) (pivots : [m]f32)
+      (lt: f32 -> f32 -> bool) (eq: f32 -> f32 -> bool)
+      (xs: [n]f32) (shp: [m]i32) (pivs: [m]f32)
     : ([n]f32, ([m]i32, [m]i32)) =
 
-    let piv_e : [n]f32 = expandf32 shp pivots :> [n]f32
+    -- Udvid pivot pr. segment.
+    let piv_e : [n]f32 = expandf32 shp pivs :> [n]f32
 
-    let cs1s  : [n]bool = map2 p1 As piv_e
-    let cs2s  : [n]bool = map2 p2 As piv_e
-    let tfs1s : [n]i32  = map (\b -> if b then 1 else 0) cs1s
-    let tfs2s : [n]i32  = map (\b -> if b then 1 else 0) cs2s
-    let ffss  : [n]i32  = map2 (\a b -> if a || b then 0 else 1) cs1s cs2s
+    -- Klassifikation pr. element.
+    let c_lt : [n]bool = map2 lt xs piv_e
+    let c_eq : [n]bool = map2 eq xs piv_e
+    let b2i = (\b -> if b then 1 else 0)
+    let t_lt : [n]i32 = map b2i c_lt
+    let t_eq : [n]i32 = map b2i c_eq
+    let t_gt : [n]i32 = map2 (\a b -> if a || b then 0 else 1) c_lt c_eq
 
-    let As_flags : [n]bool =
-      mkFlagArray shp false (replicate m true) :> [n]bool
+    -- Segment-start flags.
+    let flags : [n]bool = mkFlagArray shp false (replicate m true) :> [n]bool
 
-    let isT1s : [n]i32 = sgmScanInc (+) 0 As_flags tfs1s
-    let isT2s : [n]i32 =
-      let scan2  = sgmScanInc (+) 0 As_flags tfs2s :> [n]i32
-      let i1s    =
-        let offs = scanex (+) 0 shp :> [m]i32
-        let last = map (\sz -> sz - 1) shp
-        in map2 (\off i -> if i == -1 then 0 else isT1s[off+i]) offs last
-      let i1s_e = expandi32 shp i1s :> [n]i32
-      in map2 (+) i1s_e scan2
+    -- Segmenterede inkl. præfikser (1-baserede) for hver klasse.
+    let ps_lt  : [n]i32 = sgmScanInc (+) 0 flags t_lt
+    let ps_eq0 : [n]i32 = sgmScanInc (+) 0 flags t_eq   -- <- UDEN base!
+    let ps_gt  : [n]i32 = sgmScanInc (+) 0 flags t_gt
 
-    let i1s : [m]i32 =
-      let offs = scanex (+) 0 shp :> [m]i32
-      let last = map (\sz -> sz - 1) shp
-      in map2 (\off i -> if i == -1 then 0 else isT1s[off+i]) offs last
+    -- Sidste indeks i hvert segment samt offsets.
+    let offs   : [m]i32 = scanex (+) 0 shp
+    let lastix : [m]i32 = map (\len -> len-1) shp
 
-    let i2s : [m]i32 =
-      let offs = scanex (+) 0 shp :> [m]i32
-      let last = map (\sz -> sz - 1) shp
-      let tmp  = map2 (\off i -> if i == -1 then 0 else isT2s[off+i]) offs last
-      in map2 (\a b -> b - a) i1s tmp
+    -- Antal pr. segment.
+    let cnt_lt : [m]i32 = map2 (\o i -> if i == -1 then 0 else ps_lt[o+i])  offs   lastix
+    let cnt_eq : [m]i32 = map2 (\o i -> if i == -1 then 0 else ps_eq0[o+i]) offs   lastix
 
-    let offs   : [m]i32 = scanex (+) 0 shp :> [m]i32
-    let lt_off : [m]i32 = offs
-    let eq_off : [m]i32 = map2 (+) offs i1s
-    let gt_off : [m]i32 = map3 (\o a b -> o + a + b) offs i1s i2s
+    -- Startoffsets for hver klasse.
+    let off_lt : [m]i32 = offs
+    let off_eq : [m]i32 = map2 (+) offs cnt_lt
+    let off_gt : [m]i32 = map3 (\o a b -> o + a + b) offs cnt_lt cnt_eq
 
-    let lt_off_e : [n]i32 = expandi32 shp lt_off :> [n]i32
-    let eq_off_e : [n]i32 = expandi32 shp eq_off :> [n]i32
-    let gt_off_e : [n]i32 = expandi32 shp gt_off :> [n]i32
+    -- Udvid offsets til fladt layout.
+    let off_lt_e : [n]i32 = expandi32 shp off_lt :> [n]i32
+    let off_eq_e : [n]i32 = expandi32 shp off_eq :> [n]i32
+    let off_gt_e : [n]i32 = expandi32 shp off_gt :> [n]i32
 
-    let pos_lt : [n]i32 = map2 (\o p -> o + (p - 1)) lt_off_e isT1s
-    let pos_eq : [n]i32 = map2 (\o p -> o + (p - 1)) eq_off_e isT2s
+    -- Absolutte destinationer (0-baseret): offset + (prefix-1).
+    let pos_lt : [n]i32 = map2 (\o p -> o + (p - 1)) off_lt_e ps_lt
+    let pos_eq : [n]i32 = map2 (\o p -> o + (p - 1)) off_eq_e ps_eq0   -- <- fix
+    let pos_gt : [n]i32 = map2 (\o p -> o + (p - 1)) off_gt_e ps_gt
 
-    let ff_ps  : [n]i32 = sgmScanInc (+) 0 As_flags ffss
-    let pos_gt : [n]i32 = map2 (\o p -> o + (p - 1)) gt_off_e ff_ps
+    -- Vælg endelig destination pr. element.
+    let dest : [n]i32 =
+      map3 (\bl be (a,b,c) -> if bl then a else if be then b else c)
+           c_lt c_eq (zip3 pos_lt pos_eq pos_gt)
 
-    let indss : [n]i32 =
-      map3 (\c1 c2 triple ->
-              let (a,b,c) = triple
-              in if c1 then a else if c2 then b else c)
-           cs1s cs2s (zip3 pos_lt pos_eq pos_gt)
+    -- Scatter i ny rækkefølge.
+    let xs' : [n]f32 = scatter (copy xs) (map i64.i32 dest) xs
 
-    let As' : [n]f32 = scatter (copy As) (map i64.i32 indss) As
-    in (As', (i1s, i2s))
+    in (xs', (cnt_lt, cnt_eq))
 }
 
 -- =======================

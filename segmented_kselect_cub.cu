@@ -8,9 +8,7 @@
 #include <cub/cub.cuh>
 #include "utils.cuh"
 
-// -----------------------------------------------------
-// Små værktøjer (host)
-// -----------------------------------------------------
+// Små værktøjer
 
 static void fill_random_u32(std::vector<uint32_t>& v, uint64_t seed = 1234567ULL) {
   std::mt19937_64 rng(seed ^ 0x9e3779b97f4a7c15ULL);
@@ -30,7 +28,7 @@ static std::vector<uint32_t> scan_exclusive_u32(const std::vector<uint32_t>& a) 
   return out;
 }
 
-// 0 < k <= len; vælg tilfældigt i [1, floor(2/3*len)] (som i din vens kode)
+// 0 < k <= len; vælg tilfældigt i [1, floor(2/3*len)]
 static void fill_random_ks(std::vector<uint32_t>& ks, const std::vector<uint32_t>& shp, uint64_t seed = 4242ULL) {
   size_t M = shp.size();
   ks.resize(M);
@@ -44,9 +42,8 @@ static void fill_random_ks(std::vector<uint32_t>& ks, const std::vector<uint32_t
   }
 }
 
-// -----------------------------------------------------
-// Kernel: hent k'te element i hvert segment (1-indekseret)
-// -----------------------------------------------------
+// Kernel: henter k'te element i hvert segment (1-indekseret)
+
 __global__ void extract_kth_kernel(uint32_t M,
                                    const uint32_t* __restrict__ d_offsets,
                                    const uint32_t* __restrict__ ks,
@@ -61,13 +58,12 @@ __global__ void extract_kth_kernel(uint32_t M,
   }
 }
 
-// -----------------------------------------------------
 // Enkelt “batch rank-select via sort”
 // - Sorterer hvert segment med CUB SegmentedRadixSort
 // - Ekstraherer k'te element pr. segment
 // - Validerer både sorteringsorden og udvalgte elementer
 // - Returnerer gennemsnitlig tid per kørsel i mikrosekunder
-// -----------------------------------------------------
+
 static double run_segmented_select(uint32_t M,
                                    const std::vector<uint32_t>& shp,
                                    const std::vector<uint32_t>& h_ks,
@@ -160,10 +156,7 @@ static double run_segmented_select(uint32_t M,
   return us_per_iter;
 }
 
-// -----------------------------------------------------
-// main: matcher din vens CLI og printformat
-//   Usage: ./test-rank-search-k <N_total> <M_segments>
-// -----------------------------------------------------
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::fprintf(stderr, "Usage: %s <size-of-flat-array> <size-of-shp>\n", argv[0]);
@@ -176,8 +169,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // lav regular shape der summer til N_eff = M * floor(N_total/M)
-  // (samme idé som vens “regularShape” → ens segmentlængder)
+  //regular shape der summer til N_eff = M * floor(N_total/M)
   std::vector<uint32_t> shp;
   make_regular_shape(shp, M, N_total);
   std::vector<uint32_t> offs = scan_exclusive_u32(shp);

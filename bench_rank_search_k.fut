@@ -3,13 +3,13 @@ import "flatten_rank_search_k"
 -- Bench Unoptimized
 -- ==
 -- entry: benchUnoptimized
--- random input { [1000][6250]f32 }
--- random input { [1000][12500]f32 }
--- random input { [1000][25000]f32 }
--- random input { [1000][50000]f32 }
--- random input { [1000][100000]f32 }
--- random input { [1000][200000]f32 }
--- random input { [1000][400000]f32 }
+-- random input { [1000][5000]f32 }
+-- random input { [1000][10000]f32 }
+-- random input { [1000][20000]f32 }
+-- random input { [1000][40000]f32 }
+-- random input { [1000][80000]f32 }
+-- random input { [1000][160000]f32 }
+-- random input { [1000][320000]f32 }
 entry benchUnoptimized [m][n] (A2d : [m][n]f32) : [m]f32 =
   let n_i32 : i32   = i32.i64 n
   let flatA         = flatten A2d
@@ -26,13 +26,13 @@ entry benchUnoptimized [m][n] (A2d : [m][n]f32) : [m]f32 =
 -- Bench Optimized
 -- ==
 -- entry: benchOptimized
--- random input { [1000][6250]f32 }
--- random input { [1000][12500]f32 }
--- random input { [1000][25000]f32 }
--- random input { [1000][50000]f32 }
--- random input { [1000][100000]f32 }
--- random input { [1000][200000]f32 }
--- random input { [1000][400000]f32 }
+-- random input { [1000][5000]f32 }
+-- random input { [1000][10000]f32 }
+-- random input { [1000][20000]f32 }
+-- random input { [1000][40000]f32 }
+-- random input { [1000][80000]f32 }
+-- random input { [1000][160000]f32 }
+-- random input { [1000][320000]f32 }
 entry benchOptimized [m][n] (A2d : [m][n]f32) : [m]f32 =
   let n_i32 : i32   = i32.i64 n
   let flatA         = flatten A2d
@@ -55,7 +55,13 @@ entry benchOptimized [m][n] (A2d : [m][n]f32) : [m]f32 =
 -- Bench Compiler-flattened
 -- ==
 -- entry: benchCompilerFlattened
--- random input { [4][16]f32 }
+-- random input { [1000][5000]f32 }
+-- random input { [1000][10000]f32 }
+-- random input { [1000][20000]f32 }
+-- random input { [1000][40000]f32 }
+-- random input { [1000][80000]f32 }
+-- random input { [1000][160000]f32 }
+-- random input { [1000][320000]f32 }
 entry benchCompilerFlattened [m][n] (A2d : [m][n]f32) : [m]f32 =
   let n_i32 : i32   = i32.i64 n
   let flatA         = flatten A2d
